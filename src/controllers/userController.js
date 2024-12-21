@@ -3,6 +3,7 @@ import User from "../models/user.js";
 import { ApiError } from "../utils/ApiError.js";
 import { uploadoncloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken";
 
 //method for creation of access token and refresh token
 const generateAcessandRefreshToken = async (userId) => {
@@ -16,7 +17,6 @@ const generateAcessandRefreshToken = async (userId) => {
     await user.save({ validateBeforeSave: false });
 
     return { accessToken, refreshToken };
-
   } catch (error) {
     throw new ApiError(500, "Something went wrong while generating tokens");
   }
@@ -41,6 +41,8 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(409, "User already exists");
   }
 
+  console.log(req.files);
+
   //check for image file and avatar
   const avatarlocalpath = req.files?.avatar[0]?.path;
   // const coverimagelocalpath = req.files?.coverImage[0]?.path;
@@ -51,7 +53,7 @@ const registerUser = asyncHandler(async (req, res) => {
     Array.isArray(req.files.coverImage) &&
     req.files.coverImage.length > 0
   ) {
-    coverimagelocalpath = req.files?.coverImage[0]?.path;
+    coverimagelocalpath = req.files.coverImage[0].path;
   }
 
   if (!avatarlocalpath) {
@@ -117,10 +119,14 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 
   // Generate access and refresh tokens
-  const { accessToken, refreshToken } = await generateAcessandRefreshToken(user._id);
+  const { accessToken, refreshToken } = await generateAcessandRefreshToken(
+    user._id
+  );
 
   // Get the logged-in user details without sensitive fields
-  const loggedinuser = await User.findById(user._id).select("-password -refreshToken");
+  const loggedinuser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
 
   // Set cookie options
   const options = {
@@ -146,7 +152,6 @@ const loginUser = asyncHandler(async (req, res) => {
     );
 });
 
-
 //logout controller logic
 const logoutuser = asyncHandler(async (req, res) => {
   //removing accesstoken from the database
@@ -165,16 +170,67 @@ const logoutuser = asyncHandler(async (req, res) => {
   //now removing from the cookie
   const options = {
     httpOnly: true,
-    secure: true
-  }
+    secure: true,
+  };
 
   return res
     .status(200)
     .clearCookie("accessToken", options)
     .clearCookie("refreshToken", options)
     .json(new ApiResponse(200, {}, "User logged out successfully"));
-
-
 });
 
-export { registerUser, loginUser, logoutuser };
+//inorder when the token is expired we need to refresh the token and generate new access token
+//this is the controller logic for the same
+const refresaccesshtoken = asyncHandler(async (req, res) => {
+  const incomingrefreshtoken = req.cookie.refreshToken || req.body.refreshToken;
+
+  if (!incomingrefreshtoken) {
+    throw new ApiError(400, "Refresh token is required");
+  }
+
+  try {
+    //verify the refresh token
+    const decodedtoken = jwt.verify(
+      incomingrefreshtoken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
+    const user = await User.findById(decodedtoken?.id);
+
+    if (!user) {
+      throw new ApiError(404, "Invalid Refresh Token ");
+    }
+
+    if (user?.refreshToken !== incomingrefreshtoken) {
+      throw new ApiError(401, " Refresh Token used or expired");
+    }
+
+    const options = {
+      httpOnly: true,
+      secure: true,
+    };
+    const { accessToken, newrefreshToken } = await generateAcessandRefreshToken(
+      user._id
+    );
+
+    return res
+      .status(200)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", newrefreshToken, options)
+      .json(
+        new ApiResponse(
+          200,
+          {
+            user: user,
+            accessToken,
+            refreshToken: newrefreshToken,
+          },
+          "Access Token Refreshed Successfully"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(401, "Invalid Refresh Token");
+  }
+});
+
+export { registerUser, loginUser, logoutuser , refresaccesshtoken };
