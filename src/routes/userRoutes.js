@@ -5,7 +5,7 @@ import {
   logoutuser,
 } from "../controllers/userController.js";
 import { upload } from "../middlewares/multer.js";
-import { verifyJWT } from "./../middlewares/auth";
+import { verifyJWT } from "./../middlewares/auth.js";
 
 const router = Router();
 
