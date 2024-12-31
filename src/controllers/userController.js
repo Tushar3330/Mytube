@@ -425,7 +425,7 @@ const getUserchannelProfile = asyncHandler(async (req, res) => {
 
     {
       $project: {
-       fullName: 1,
+        fullName: 1,
         username: 1,
         avatar: 1,
         coverImage: 1,
@@ -433,19 +433,72 @@ const getUserchannelProfile = asyncHandler(async (req, res) => {
         subscribedtoCount: 1,
         isSubscribed: 1,
         email: 1,
-      },  
-    }
-
+      },
+    },
   ]);
 
-  if(!channel?.length){
+  if (!channel?.length) {
     throw new ApiError(404, "Channel not found");
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, channel[0], "Channel Profile Retrieved Successfully"));
+    .json(
+      new ApiResponse(200, channel[0], "Channel Profile Retrieved Successfully")
+    );
+});
 
+//get user watch history
+const getuserwatchhistory = asyncHandler(async (req, res) => {
+  const user = await User.aggregate([
+    {
+      $match: { _id: new mongoose.Types.ObjectId(req.user._id) },
+    },
+    {
+      $lookup: {
+        from: "video",
+        localField: "watchHistory",
+        foreignField: "_id",
+        as: "watchHistory",
+        pipeline: [
+          {
+            $lookup: {
+              from: "user",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              pipeline: [
+                {
+                  $project: {
+                    fullName: 1,
+                    username: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              owner: {
+                $first: "$owner",
+              },
+            },
+          },
+        ],
+      },
+    },
+  ]);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        user[0].watchHistory,
+        "Watch History Retrieved Successfully"
+      )
+    );
 });
 
 export {
@@ -459,4 +512,5 @@ export {
   updateavatar,
   updatecoverimage,
   getUserchannelProfile,
+  getuserwatchhistory
 };
