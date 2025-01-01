@@ -4,7 +4,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { uploadoncloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
-
+import { mongoose } from 'mongoose';
 //method for creation of access token and refresh token
 const generateAcessandRefreshToken = async (userId) => {
   try {
@@ -158,9 +158,9 @@ const logoutuser = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(
     req.user._id,
     {
-      $set: {
-        refreshToken: undefined,
-      },
+      $unset:{
+        refreshToken:1
+      }
     },
     {
       new: true,
@@ -183,10 +183,10 @@ const logoutuser = asyncHandler(async (req, res) => {
 //inorder when the token is expired we need to refresh the token and generate new access token
 //this is the controller logic for the same
 const refresaccesshtoken = asyncHandler(async (req, res) => {
-  const incomingrefreshtoken = req.cookie.refreshToken || req.body.refreshToken;
+  const incomingrefreshtoken = req.cookies.refreshToken || req.body.refreshToken;
 
   if (!incomingrefreshtoken) {
-    throw new ApiError(400, "Refresh token is required");
+    throw new ApiError(400, "Refresh token is required"); 
   }
 
   try {
@@ -201,7 +201,7 @@ const refresaccesshtoken = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Invalid Refresh Token ");
     }
 
-    if (user?.refreshToken !== incomingrefreshtoken) {
+    if (incomingrefreshtoken !==user?.refreshToken  ) {
       throw new ApiError(401, " Refresh Token used or expired");
     }
 
@@ -212,7 +212,7 @@ const refresaccesshtoken = asyncHandler(async (req, res) => {
     const { accessToken, newrefreshToken } = await generateAcessandRefreshToken(
       user._id
     );
-
+  
     return res
       .status(200)
       .cookie("accessToken", accessToken, options)
